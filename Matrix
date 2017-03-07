@@ -1,0 +1,314 @@
+// 稀疏矩阵压缩存储
+#include <iostream>
+#include <vector>
+using namespace std;
+
+template <class T>
+class SparseMatrix
+{
+	template<class T>
+	struct Trituple
+	{
+		Trituple(){}
+		Trituple(size_t _row, size_t _col,  const T _value) // 三元组存储有效值
+			:row(_row)
+			,col(_col)
+			,value(_value)
+		{ }
+		size_t row;  // 存储有效值的行
+		size_t col;  // 存储有效值的列
+		T value;    // 存储当前行列的值
+	};
+public:
+	// 构造函数
+	SparseMatrix(){}
+	SparseMatrix(const T* _array, size_t row, size_t col, T flag)
+		:_row(row)
+		,_col(col)
+		,_flag(flag) //设立一个标记 标识  无效元素
+	{
+		for (size_t idxRow = 0; idxRow < row; ++idxRow) // 要把数组遍历一遍 扫描出有效值
+		{
+			for (size_t idxCol = 0; idxCol < col; ++idxCol)
+			{
+				if (_array[idxRow*_col + idxCol ] != _flag) // 当前坐标位置 不是有效元素时
+				{
+					tri.push_back(Trituple<T>(idxRow, idxCol, _array[idxRow*_col + idxCol ])); // 将有效值入栈 保存
+				}
+			}
+		}
+	}
+
+	// 输出运算符重载
+	friend ostream& operator<<(ostream& _cout,  SparseMatrix<T> spm)
+	{
+		size_t index = 0;
+		for (size_t idxRow = 0; idxRow < spm._row; ++idxRow)
+		{
+			for (size_t idxCol = 0; idxCol < spm._col; ++idxCol)
+			{
+				_cout << spm.Access(idxRow, idxCol) << " ";
+			}
+			cout << endl;
+		}
+		return _cout;
+	}
+
+	// 访问元素
+	T& Access(size_t row, size_t col)
+	{
+		vector<Trituple<T>>::iterator itr = tri.begin();
+
+		while (itr != tri.end())
+		{
+			if (itr->row == row && itr->col == col)
+			{
+				return itr->value;
+			}
+			itr++;
+		}
+
+// 		size_t index = 0;
+// 		while (index < tri.size())
+// 		{
+// 			if (row == tri[index].row && col == tri[index].col)
+// 			{
+// 				return tri[index].value;
+// 			}
+// 			index++;
+// 		}
+		return _flag;
+	}
+
+	SparseMatrix<T>  MatrixInverse()
+	{
+		SparseMatrix<T> tempSpm;
+		tempSpm.tri.resize(tri.size());
+		tempSpm._row = _col;
+		tempSpm._col = _row;
+		tempSpm._flag = _flag;
+
+// 		for (size_t idxCol = 0; idxCol < _col; ++idxCol)
+// 		{
+// 			size_t index = 0;
+// 			while (index < tri.size())
+// 			{
+// 				if (tri[index].col == idxCol)
+// 				{
+// 					tempSpm.tri.push_back(Trituple<T>(tri[index].col, tri[index].row, tri[index].value));
+// 				}
+// 				++index;
+// 			}
+// 		}
+
+		size_t index = 0;
+		while (index < tri.size())
+		{
+			Trituple<T> tempTri;
+			tempTri.row = tri[index].col;
+			tempTri.col = tri[index].row;
+			tempTri.value = tri[index].value;
+			tempSpm.tri[index] = tempTri;
+			index++;
+		}
+		return  tempSpm;
+	}
+
+	SparseMatrix<T> FastTranport()
+	{
+		SparseMatrix<T> ret;
+		ret._col = _row;
+		ret._row = _col;
+		ret._flag = _flag;
+		ret.tri.resize(tri.size());
+
+		// 统计元素
+		size_t size = tri.size();
+		size_t index = 0;
+		int* pCount = new int[_col]; // 每列的元素个数
+		memset(pCount, 0, sizeof(int)*_col);
+		while (index < size)
+		{
+			pCount[tri[index].col]++;
+			index++;
+		}
+
+		index = 1;
+		int* pStartAddr = new int[_col];
+		memset(pStartAddr, 0, sizeof(int)*_col);
+		while (index < size)
+		{
+			pStartAddr[index] = pStartAddr[index-1] + pCount[index-1];
+			index++;
+		}
+
+		index = 0;
+		while (index < size)
+		{
+			ret.tri[pStartAddr[tri[index].col]] = Trituple<T>(tri[index].col, tri[index].row, tri[index].value);
+			pStartAddr[tri[index].col]++;
+			index++;
+
+		}
+		delete[] pStartAddr;
+		delete[] pCount;
+		return ret;
+
+	}
+	SparseMatrix<T>  InverseSecond()
+	{
+		SparseMatrix<T> tempSpm;
+		tempSpm.tri.resize(tri.size());
+		tempSpm._row = _col;
+		tempSpm._col = _row;
+		tempSpm._flag = _flag;
+
+		// 1. 个数
+		int * arrCount = new int[_col];
+		memset(arrCount, 0, sizeof(int)*_col);
+
+		size_t index = 0;
+		while (index < tri.size())
+		{
+			arrCount[ tri[index++].col]++;
+		}
+		// 2. 位置
+		int* arrStartPos = new int[_col];
+		memset(arrStartPos, 0, sizeof(int)*_col);
+		index = 1;
+		while (index < tri.size())
+		{
+			arrStartPos[index] = arrStartPos[index-1] + arrCount[index-1];
+			index++;
+		}
+		// 3. 放置
+		index = 0;
+		while (index < tri.size())
+		{
+			Trituple<T>& temp = tri[index++];
+			tempSpm.tri[arrStartPos[temp.col]] = Trituple<T>(temp.col, temp.row, temp.value);
+			arrStartPos[temp.col]++;
+		}
+		delete[] arrCount;
+		delete[] arrStartPos;
+		return tempSpm;
+	}
+	SparseMatrix<T> operator+( SparseMatrix<T>& spm)
+	{
+		assert(_row==spm._row && _col ==spm._col);
+		SparseMatrix<T> sum;
+		sum._col = _col;
+		sum._row = _row;
+		sum._flag = _flag;
+
+		size_t indexL = 0;
+		size_t indexR = 0;
+		size_t AddrL = 0;
+		size_t AddrR = 0;
+		while (indexL<tri.size() && indexR <spm.tri.size())
+		{
+			AddrL = tri[indexL].row*_col + tri[indexL].col;
+			AddrR = spm.tri[indexR].row*_col + spm.tri[indexR].col;
+
+			if (AddrL < AddrR)
+			{
+				sum.tri.push_back(tri[indexL]);
+				indexL++;
+			}
+			else if(AddrL > AddrR)
+			{
+				sum.tri.push_back(spm.tri[indexR]);
+				indexR++;
+			}
+			else
+			{
+				if ((tri[indexL].value + spm.tri[indexR].value)!=_flag)
+				{
+					sum.tri.push_back(Trituple<T>(tri[indexL].row, tri[indexL].col, tri[indexL].value + spm.tri[indexR].value));
+				}
+				++indexL;
+				++indexR;
+			}
+		}
+
+		while (indexL < tri.size())
+		{
+			tri.push_back(tri[indexL++]);
+		}
+		while (indexR < spm.tri.size())
+		{
+			spm.tri.push_back(spm.tri[indexR++]);
+		}
+
+		return sum;
+
+	}
+
+private:
+	vector<Trituple<T> > tri;
+	size_t _row;
+	size_t _col;
+	T _flag;
+};
+
+int main()
+{
+	int a[6][5] = {
+					{1, 0, 3, 0, 5},
+					{0, 0, 0, 0, 0},
+					{1, 0, 0, 0, 0},
+					{1, 0, 3, 0, 5},
+					{0, 0, 0, 0, 0},
+					{0, 0, 1, 0, 0}, };
+	int b[6][5] = {
+		{1, 0, 3, 0, 5},
+		{0, 1, 0, 0, 2},
+		{1, 0, 0, 0, 0},
+		{1, 0, 3, 0, 5},
+		{0, 2, 0, -1, 0},
+		{-9, 0, 1, 0, 0}, };
+
+	SparseMatrix<int> spm1((int*)a, 6, 5, 0);
+	SparseMatrix<int> spm2((int*)b, 6, 5, 0);
+	SparseMatrix<int> spm3;
+	spm3 = spm1 + spm2;
+	cout << spm3 << endl;
+
+// 	 SparseMatrix<int> t =  spm1.FastTranport();
+// 	 cout << spm1 << endl;
+// 	 cout << t << endl;
+
+    	cout << spm1 << endl;
+	cout << spm1.Access(0,0) << " " ;
+	cout << spm1.Access(0,1) << " " ;
+	cout << spm1.Access(0,2) << " " ;
+	cout << spm1.Access(0,3) << " " ;
+	cout << spm1.Access(0,4) << endl;
+	cout << spm1.Access(1,0) << " " ;
+	cout << spm1.Access(1,1) << " " ;
+	cout << spm1.Access(1,2) << " " ;
+	cout << spm1.Access(1,3) << " " ;
+	cout << spm1.Access(1,4) << endl;		
+	cout << spm1.Access(2,0) << " " ;
+	cout << spm1.Access(2,1) << " " ;
+	cout << spm1.Access(2,2) << " " ;
+	cout << spm1.Access(2,3) << " " ;
+	cout << spm1.Access(2,4) << endl;	
+	cout << spm1.Access(3,0) << " " ;
+	cout << spm1.Access(3,1) << " " ;
+	cout << spm1.Access(3,2) << " " ;
+	cout << spm1.Access(3,3) << " " ;
+	cout << spm1.Access(3,4) << endl;		
+	cout << spm1.Access(4,0) << " " ;
+	cout << spm1.Access(4,1) << " " ;
+	cout << spm1.Access(4,2) << " " ;
+	cout << spm1.Access(4,3) << " " ;
+	cout << spm1.Access(4,4) << endl;
+	cout << spm1.Access(5,0) << " " ;
+	cout << spm1.Access(5,1) << " " ;
+	cout << spm1.Access(5,2) << " " ;
+	cout << spm1.Access(5,3) << " " ;
+	cout << spm1.Access(5,4) << endl;
+
+	return 0;
+}
